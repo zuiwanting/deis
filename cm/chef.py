@@ -14,6 +14,7 @@ import socket
 from celery.canvas import group
 
 from api.ssh import exec_ssh, connect_ssh
+from api.ssh import interact_ssh
 from cm.chef_api import ChefAPI
 
 
@@ -199,8 +200,9 @@ def run_node(node, command):
     """
     ssh = connect_ssh(node['ssh_username'], node['fqdn'],
                       node['ssh_port'], node['ssh_private_key'])
-    output, rc = exec_ssh(ssh, command, pty=True)
-    return output, rc
+    return interact_ssh(ssh, command, pty=True)
+    # output, rc = exec_ssh(ssh, command, pty=True)
+    # return output, rc
 
 
 def converge_formation(formation):

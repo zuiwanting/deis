@@ -434,9 +434,9 @@ urlpatterns = patterns(
     url(r'^apps/(?P<id>[-_\w]+)/scale/?',
         views.AppViewSet.as_view({'post': 'scale'})),
     url(r'^apps/(?P<id>[-_\w]+)/logs/?',
-        views.AppViewSet.as_view({'post': 'logs'})),
+        views.app_logs),
     url(r'^apps/(?P<id>[-_\w]+)/run/?',
-        views.AppViewSet.as_view({'post': 'run'})),
+        views.app_run),
     url(r'^apps/(?P<id>[-_\w]+)/calculate/?',
         views.AppViewSet.as_view({'post': 'calculate'})),
     # apps sharing

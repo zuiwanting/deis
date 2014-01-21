@@ -5,12 +5,15 @@ RESTful view classes for presenting Deis API objects.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 import json
+import logging
 
 from Crypto.PublicKey import RSA
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.models import User
+from django.core.exceptions import MiddlewareNotUsed
 from django.db import transaction
 from django.utils import timezone
+from geventwebsocket import WebSocketError
 from guardian.shortcuts import assign_perm
 from guardian.shortcuts import get_objects_for_user
 from guardian.shortcuts import get_users_with_perms
@@ -26,6 +29,9 @@ from rest_framework.response import Response
 from api import models, serializers, tasks
 
 from deis import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class AnonymousAuthentication(BaseAuthentication):
@@ -500,31 +506,12 @@ class AppViewSet(OwnerViewSet):
                         content_type='application/json')
 
     def calculate(self, request, **kwargs):
+        logger.warn(type(request))
+        logger.warn(request.user)
         app = self.get_object()
         databag = app.calculate()
         return Response(databag, status=status.HTTP_200_OK,
                         content_type='application/json')
-
-    def logs(self, request, **kwargs):
-        app = self.get_object()
-        try:
-            logs = app.logs()
-        except EnvironmentError:
-            return Response("No logs for {}".format(app.id),
-                            status=status.HTTP_404_NOT_FOUND,
-                            content_type='text/plain')
-        return Response(logs, status=status.HTTP_200_OK,
-                        content_type='text/plain')
-
-    def run(self, request, **kwargs):
-        app = self.get_object()
-        command = request.DATA['command']
-        try:
-            output_and_rc = app.run(command)
-        except EnvironmentError as e:
-            return Response(str(e), status=status.HTTP_400_BAD_REQUEST)
-        return Response(output_and_rc, status=status.HTTP_200_OK,
-                        content_type='text/plain')
 
     def destroy(self, request, **kwargs):
         app = self.get_object()
@@ -682,3 +669,99 @@ class AppContainerViewSet(OwnerViewSet):
         qs = self.get_queryset(**kwargs)
         obj = qs.get(num=self.kwargs['num'])
         return obj
+
+
+def app_logs(request, **kwargs):
+    # permission_classes = (permissions.IsAuthenticated, IsAppUser)
+    # app = self.get_object()
+    # try:
+    #     logs = app.logs()
+    # except EnvironmentError:
+    #     return Response("No logs for {}".format(app.id),
+    #                     status=status.HTTP_404_NOT_FOUND,
+    #                     content_type='text/plain')
+    # return Response(logs, status=status.HTTP_200_OK,
+    #                 content_type='text/plain')
+    # for middleware_path in settings.MIDDLEWARE_CLASSES:
+    #     mw_class = import_by_path(middleware_path)
+    #     try:
+    #         mw_instance = mw_class()
+    #     except MiddlewareNotUsed:
+    #         continue
+
+    #     if hasattr(mw_instance, 'process_request'):
+    #         request_middleware.append(mw_instance.process_request)
+    websock = request.environ.get("wsgi.websocket")
+    if websock:
+        try:
+            while True:
+                message = websock.receive()
+                websock.send(message)
+        except WebSocketError as err:
+            print "{0}: {1}".format(err.__class__.__name__, err)
+        finally:
+            websock.close()
+    return Response()
+
+from django.utils.module_loading import import_by_path
+
+
+def app_run(request, **kwargs):
+    request_middleware = []
+    for middleware_path in settings.MIDDLEWARE_CLASSES:
+        mw_class = import_by_path(middleware_path)
+        try:
+            mw_instance = mw_class()
+        except MiddlewareNotUsed:
+            continue
+
+        if hasattr(mw_instance, 'process_request'):
+            request_middleware.append(mw_instance.process_request)
+
+    response = None
+    # Apply request middleware
+    for middleware_method in request_middleware:
+        response = middleware_method(request)
+        if response:
+            break
+
+    logger.warn(request.session.items())
+    logger.warn(request)
+    logger.warn(request.user)
+
+    # # from rest_framework.request import Request
+    # # request = Request(request)
+    # for klass in settings.MIDDLEWARE_CLASSES:
+    #     middleware = klass()
+    #     request = middleware.process_request(request)
+    # logger.warn(request.session)
+    # logger.warn(dir(request.session))
+    # logger.warn(type(request))
+    # logger.warn(request.user)
+    # logger.warn(dir(request))
+    # for klass in AppViewSet.permission_classes:
+    #     permission = klass()
+    #     logger.warn(klass)
+    #     logger.warn(permission.has_permission(request, None))
+    # logger.warn(kwargs)
+
+    # permission_classes = (permissions.IsAuthenticated, IsAppUser)
+    # app = self.get_object()
+    # command = request.DATA['command']
+    # try:
+    #     output_and_rc = app.run(command)
+    # except EnvironmentError as e:
+    #     return Response(str(e), status=status.HTTP_400_BAD_REQUEST)
+    # return Response(output_and_rc, status=status.HTTP_200_OK,
+    #                 content_type='text/plain')
+    websock = request.environ.get("wsgi.websocket")
+    if websock:
+        try:
+            while True:
+                message = websock.receive()
+                websock.send(message)
+        except WebSocketError as err:
+            print "{0}: {1}".format(err.__class__.__name__, err)
+        finally:
+            websock.close()
+    return Response()

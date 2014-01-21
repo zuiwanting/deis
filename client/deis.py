@@ -50,6 +50,7 @@ from getpass import getpass
 from itertools import cycle
 from threading import Event
 from threading import Thread
+import code
 import glob
 import json
 import locale
@@ -62,6 +63,7 @@ import tempfile
 import time
 import urlparse
 import webbrowser
+import websocket
 
 from dateutil import parser
 from dateutil import relativedelta
@@ -75,6 +77,8 @@ __version__ = '0.4.1'
 
 
 locale.setlocale(locale.LC_ALL, '')
+ENCODING = getattr(sys.stdin, "encoding", "").lower()
+OPCODE_DATA = (websocket.ABNF.OPCODE_TEXT, websocket.ABNF.OPCODE_BINARY)
 
 
 class Session(requests.Session):
@@ -141,11 +145,7 @@ class Session(requests.Session):
 
     app = property(get_app)
 
-    def request(self, *args, **kwargs):
-        """
-        Issue an HTTP request with proper cookie handling including
-        `Django CSRF tokens <https://docs.djangoproject.com/en/dev/ref/contrib/csrf/>`
-        """
+    def _csrf_header(self, **kwargs):
         for cookie in self.cookies:
             if cookie.name == 'csrftoken':
                 if 'headers' in kwargs:
@@ -153,6 +153,14 @@ class Session(requests.Session):
                 else:
                     kwargs['headers'] = {'X-CSRFToken': cookie.value}
                 break
+        return kwargs
+
+    def request(self, *args, **kwargs):
+        """
+        Issue an HTTP request with proper cookie handling including
+        `Django CSRF tokens <https://docs.djangoproject.com/en/dev/ref/contrib/csrf/>`
+        """
+        kwargs = self._csrf_header(**kwargs)
         response = super(Session, self).request(*args, **kwargs)
         self.cookies.save()
         return response
@@ -251,6 +259,59 @@ class TextProgress(Thread):
         sys.stdout.write("{} {} ".format(backspaces, frame))
         # flush stdout or we won't see the frame
         sys.stdout.flush()
+
+
+class InteractiveConsole(Thread, code.InteractiveConsole):
+
+    def __init__(self, websocket, name=None):
+        name = name or _newname("InteractiveConsole-Thread-{}")
+        Thread.__init__(self, name=name)
+        self.daemon = True
+        self.cancelled = Event()
+        self._websocket = websocket
+
+    def run(self):
+        while not self.cancelled.is_set():
+            opcode, data = self.recv()
+            self.write(data)
+            # msg = None
+            # if not self.verbose and opcode in OPCODE_DATA:
+            #     msg = "< %s" % data
+            # elif self.verbose:
+            #     msg = "< %s: %s" % (websocket.ABNF.OPCODE_MAP.get(opcode), data)
+            # if msg:
+            #     self.write(msg)
+
+    def cancel(self):
+        """Set the animation thread as cancelled."""
+        self.cancelled.set()
+
+    def recv(self):
+        frame = self._websocket.recv_frame()
+        if not frame:
+            raise websocket.WebSocketException("Invalid frame: {}".format(frame))
+        elif frame.opcode == websocket.ABNF.OPCODE_CLOSE:
+            self._websocket.send_close()
+            frame.data = None
+        elif frame.opcode == websocket.ABNF.OPCODE_PING:
+            self._websocket.pong('Hi!')
+        return frame.opcode, frame.data
+
+    def write(self, data):
+        if data:
+            sys.stdout.write(data)
+            # sys.stdout.write('\033[2K\033[E')
+            # sys.stdout.write("\033[34m{}\033[39m".format(data))
+            # sys.stdout.write('\n> ')
+            sys.stdout.flush()
+
+    def raw_input(self, prompt):
+        line = raw_input(prompt)
+        if ENCODING and ENCODING != 'utf-8' and not isinstance(line, unicode):
+            line = line.decode(ENCODING).encode('utf-8')
+        elif isinstance(line, unicode):
+            line = line.encode('utf-8')
+        return line
 
 
 def dictify(args):
@@ -396,6 +457,7 @@ class DeisClient(object):
             raise EnvironmentError(
                 'No active controller. Use `deis login` or `deis register` to get started.')
         url = urlparse.urljoin(controller, path, **kwargs)
+
         response = func(url, data=body, headers=headers)
         return response
 
@@ -427,6 +489,7 @@ class DeisClient(object):
         response = self._dispatch('post',
                                   "/api/apps/{}/calculate".format(app))
         if response.status_code == requests.codes.ok:  # @UndefinedVariable
+            print(response.request.headers)
             databag = json.loads(response.content)
             if quiet is False:
                 print(json.dumps(databag, indent=2))
@@ -600,12 +663,13 @@ class DeisClient(object):
         app = args.get('--app')
         if not app:
             app = self._session.app
-        response = self._dispatch('post',
-                                  "/api/apps/{}/logs".format(app))
-        if response.status_code == requests.codes.ok:  # @UndefinedVariable
-            print(response.json())
-        else:
-            raise ResponseError(response)
+        from websocket import create_connection
+        controller = self._settings['controller']
+        url = "{}/api/apps/{}/logs".format(controller, app)
+        url = url.replace('https://', 'wss://').replace('http://', 'ws://')
+        print(url)
+        ws = create_connection(url)
+        print(ws)
 
     def apps_run(self, args):
         """
@@ -614,18 +678,42 @@ class DeisClient(object):
         Usage: deis apps:run <command>...
         """
         app = self._session.app
-        body = {'command': ' '.join(sys.argv[2:])}
-        response = self._dispatch('post',
-                                  "/api/apps/{}/run".format(app),
-                                  json.dumps(body))
-        if response.status_code == requests.codes.ok:  # @UndefinedVariable
-            output, rc = json.loads(response.content)
-            if rc != 0:
-                print('Warning: non-zero return code {}'.format(rc))
-            sys.stdout.write(output)
-            sys.stdout.flush()
-        else:
-            raise ResponseError(response)
+        # body = {'command': ' '.join(sys.argv[2:])}
+
+        from websocket import create_connection
+        controller = self._settings['controller']
+        print(controller)
+        # controller = 'http://localhost:8000'
+        url = "{}/api/apps/{}/run".format(controller, app)
+        print(url)
+        request = requests.Request(method='GET', url=url)
+        prep = self._session.prepare_request(request)
+        headers = prep.headers
+        # headers = self._session._csrf_header(headers=prep.headers)['headers']
+        print(headers)
+        url = url.replace('https://', 'wss://').replace('http://', 'ws://')
+        wsock = create_connection(url)  # , header=headers)
+        console = InteractiveConsole(websocket=wsock)
+        console.start()
+        while True:
+            try:
+                message = console.raw_input('')
+                wsock.send(message)
+            except (EOFError, KeyboardInterrupt):
+                console.cancel()
+                return
+
+        # response = self._dispatch('post',
+        #                           "/api/apps/{}/run".format(app),
+        #                           json.dumps(body))
+        # if response.status_code == requests.codes.ok:  # @UndefinedVariable
+        #     output, rc = json.loads(response.content)
+        #     if rc != 0:
+        #         print('Warning: non-zero return code {}'.format(rc))
+        #     sys.stdout.write(output)
+        #     sys.stdout.flush()
+        # else:
+        #     raise ResponseError(response)
 
     def auth_register(self, args):
         """
@@ -814,7 +902,7 @@ class DeisClient(object):
                 width = max(map(len, keys)) + 5
                 for k in keys:
                     v = values[k]
-                    print(("{k:<"+str(width)+"} {v}").format(**locals()))
+                    print(("{k:<" + str(width) + "} {v}").format(**locals()))
             else:
                 output = []
                 for k in keys:

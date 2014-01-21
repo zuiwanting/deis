@@ -445,7 +445,8 @@ class Node(UuidAuditedModel):
         return tasks.converge_node.delay(self).wait()
 
     def run(self, command, **kwargs):
-        return tasks.run_node.delay(self, command).wait()
+        return tasks.run_node(self, command)
+        # return tasks.run_node.delay(self, command).wait()
 
 
 def log_event(app, msg, level=logging.INFO):
@@ -538,7 +539,7 @@ class App(UuidAuditedModel):
         data = subprocess.check_output(['tail', '-n', str(settings.LOG_LINES), path])
         return data
 
-    def run(self, command):
+    def run(self, command, websock):
         """Run a one-off command in an ephemeral app container."""
         # TODO: add support for interactive shell
         nodes = self.formation.node_set.filter(layer__runtime=True).order_by('?')

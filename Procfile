@@ -1,1 +1,1 @@
-web: gunicorn_django -c gconfig.py
+web: gunicorn deis.wsgi -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -n deis -c gconfig.py

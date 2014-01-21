@@ -2,6 +2,7 @@
 import StringIO
 import select
 import socket
+import sys
 import time
 
 import paramiko
@@ -39,6 +40,15 @@ def exec_ssh(ssh, command, pty=False):
     return output, exit_status
 
 
+def interact_ssh(ssh, command=None, pty=True):
+    try:
+        tran = ssh.get_transport()
+        chan = tran.open_session()
+        posix_shell(chan)
+    finally:
+        ssh.close()
+
+
 def read_from_ssh(chan):
     output = ''
     while True:
@@ -59,3 +69,34 @@ def read_from_ssh(chan):
                     # print("stderr => ", data)
             if not got_data:
                 return output
+
+
+def posix_shell(chan):
+    import select
+
+    # oldtty = termios.tcgetattr(sys.stdin)
+    # try:
+    # tty.setraw(sys.stdin.fileno())
+    # tty.setcbreak(sys.stdin.fileno())
+    chan.settimeout(0.0)
+
+    while True:
+        r, w, e = select.select([chan, sys.stdin], [], [])
+        if chan in r:
+            try:
+                x = chan.recv(1024)
+                if len(x) == 0:
+                    print '\r\n*** EOF\r\n',
+                    break
+                sys.stdout.write(x)
+                sys.stdout.flush()
+            except socket.timeout:
+                pass
+        if sys.stdin in r:
+            x = sys.stdin.read(1)
+            if len(x) == 0:
+                break
+            chan.send(x)
+
+    # finally:
+    #     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, oldtty)

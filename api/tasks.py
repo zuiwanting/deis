@@ -86,7 +86,7 @@ def converge_node(node):
     return output, rc
 
 
-@task
+# @task
 def run_node(node, command):
     """
     Run a single shell command on a container on a node.
@@ -95,10 +95,12 @@ def run_node(node, command):
 
     :param node: a :class:`~api.models.Node` on which to run a command
     """
-    output, rc = CM.run_node(node.flat(), command)
-    if rc != 0 and 'failed to setup the container' in output:
-        output = '\033[35mPlease run `git push deis master` first.\033[0m\n' + output
-    return output, rc
+    return CM.run_node(node.flat(), command)
+
+    # output, rc = CM.run_node(node.flat(), command)
+    # if rc != 0 and 'failed to setup the container' in output:
+    #     output = '\033[35mPlease run `git push deis master` first.\033[0m\n' + output
+    # return output, rc
 
 
 @task

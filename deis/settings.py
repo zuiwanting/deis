@@ -246,17 +246,17 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['null'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': True,
         },
         'django.request': {
             'handlers': ['console', 'mail_admins'],
-            'level': 'WARNING',
+            'level': 'DEBUG',
             'propagate': True,
         },
         'api': {
             'handlers': ['console', 'mail_admins', 'rsyslog'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': True,
         },
     }
