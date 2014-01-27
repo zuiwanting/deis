@@ -6,7 +6,10 @@ the api, provider, cm, and web Django apps.
 
 from __future__ import absolute_import
 
-from .celery import app  # noqa
+# Enable coroutine support in the PostgreSQL driver
+import psycogreen.gevent
+psycogreen.gevent.patch_psycopg()
 
+from .celery import app  # noqa
 
 __version__ = '0.4.1'
