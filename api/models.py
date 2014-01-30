@@ -349,7 +349,7 @@ class NodeManager(models.Manager):
         # always scale and balance every application
         if nodes:
             for app in formation.app_set.all():
-                Container.objects.scale(app, app.containers)
+                Container.objects.scale(app, {})
                 Container.objects.balance(formation)
         # save new structure now that scaling was successful
         formation.nodes.update(structure)
@@ -462,7 +462,6 @@ class App(UuidAuditedModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL)
     id = models.SlugField(max_length=64, unique=True)
     formation = models.ForeignKey('Formation')
-    containers = JSONField(default='{}', blank=True)
 
     class Meta:
         permissions = (('use_app', 'Can use app'),)
@@ -472,8 +471,7 @@ class App(UuidAuditedModel):
 
     def flat(self):
         return {'id': self.id,
-                'formation': self.formation.id,
-                'containers': dict(self.containers)}
+                'formation': self.formation.id}
 
     def build(self):
         config = Config.objects.create(
@@ -513,11 +511,6 @@ class App(UuidAuditedModel):
             if release.build.url:
                 d['release']['build']['url'] = release.build.url
                 d['release']['build']['procfile'] = release.build.procfile
-        d['containers'] = {}
-        containers = self.container_set.all()
-        if containers:
-            for c in containers:
-                d['containers'].setdefault(c.type, {})[str(c.num)] = c.status
         d['domains'] = []
         if self.formation.domain:
             d['domains'].append('{}.{}'.format(self.id, self.formation.domain))

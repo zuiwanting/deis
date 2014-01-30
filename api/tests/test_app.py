@@ -217,7 +217,7 @@ class AppTest(TestCase):
         databag = response.data
         self.assertIn('release', databag)
         self.assertIn('version', databag['release'])
-        self.assertIn('containers', databag)
+        # self.assertIn('containers', databag)
 
     def test_app_errors(self):
         formation_id, app_id = 'autotest', 'autotest-errors'

@@ -542,7 +542,8 @@ class DeisClient(object):
             data = response.json()
             print('=== Apps')
             for item in data['results']:
-                print('{id} {containers}'.format(**item))
+                containers = "[{}]".format(', '.join(item['container_set']))
+                print("{} {}".format(item['id'], containers))
         else:
             raise ResponseError(response)
 

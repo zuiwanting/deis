@@ -118,7 +118,6 @@ class BuildTest(TestCase):
         databag = Build.push(push)
         self.assertIn('release', databag)
         self.assertIn('version', databag['release'])
-        self.assertIn('containers', databag)
         self.assertIn('web', databag['containers'])
         self.assertIn('1', databag['containers']['web'])
         self.assertEqual(databag['containers']['web']['1'], 'up')

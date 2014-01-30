@@ -290,6 +290,13 @@ class ContainerTest(TestCase):
         body = {'web': 13}
         response = self.client.post(url, json.dumps(body), content_type='application/json')
         self.assertEqual(response.status_code, 200)
+        # test that listing apps shows their containers initially
+        url = '/api/apps'
+        body = {'formation': 'autotest'}
+        response = self.client.post(url, json.dumps(body), content_type='application/json')
+        self.assertEqual(response.status_code, 201)
+        containers = json.loads(response.data['containers'])
+        self.assertGreaterEqual(len(containers), 1)
         # test that one node has 4 and 3 nodes have 3 containers
         url = "/api/formations/{formation_id}/calculate".format(**locals())
         response = self.client.post(url, content_type='application/json')

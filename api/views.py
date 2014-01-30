@@ -492,9 +492,6 @@ class AppViewSet(OwnerViewSet):
             models.Container.objects.scale(app, new_structure)
         except EnvironmentError as e:
             return Response(str(e), status=status.HTTP_400_BAD_REQUEST)
-        # save new structure now that scaling was successful
-        app.containers.update(new_structure)
-        app.save()
         databag = app.converge()
         return Response(databag, status=status.HTTP_200_OK,
                         content_type='application/json')
